@@ -16,5 +16,6 @@
 
 import robel.dclaw
 import robel.dkitty
+import robel.dhand
 
 from robel.utils.configurable import set_env_params

@@ -126,12 +126,12 @@ class BaseDHandEnv(RobotEnv, metaclass=abc.ABCMeta):
             builder.set_dynamixel_device_path(self._device_path)
             builder.set_hardware_calibration_map(DEFAULT_DHAND_CALIBRATION_MAP)
             builder.update_group(
-                'dhand', motor_ids=[10, 11, 12, 20, 21, 22, 30, 31, 32])
+                'dhand', motor_ids=[10, 11, 12, 13, 20, 21, 22, 23, 30, 31, 32, 33, 40, 41, 42, 43])
             scripted_reset.add_groups_for_reset(builder)
 
     def _initialize_action_space(self) -> gym.Space:
         """Returns the observation space to use for this environment."""
-        qpos_indices = self.robot.get_config('dclaw').qpos_indices
+        qpos_indices = self.robot.get_config('dhand').qpos_indices
         return make_box_space(-1.0, 1.0, shape=(qpos_indices.size,))
 
     def _get_safety_scores(
@@ -151,7 +151,7 @@ class BaseDHandEnv(RobotEnv, metaclass=abc.ABCMeta):
             A dictionary of safety scores for the given values.
         """
         scores = collections.OrderedDict()
-        dclaw_config = self.robot.get_config('dclaw')
+        dclaw_config = self.robot.get_config('dhand')
 
         if pos is not None and dclaw_config.qpos_range is not None:
             # Calculate lower and upper separately so broadcasting works when
@@ -176,7 +176,7 @@ class BaseDHandEnv(RobotEnv, metaclass=abc.ABCMeta):
         return scores
 
 
-class BaseDClawObjectEnv(BaseDClawEnv, metaclass=abc.ABCMeta):
+class BaseDClawObjectEnv(BaseDHandEnv, metaclass=abc.ABCMeta):
     """Base environment for all DClaw robot tasks with objects."""
 
     def __init__(self, *args, use_guide: bool = False, **kwargs):
@@ -274,3 +274,5 @@ class BaseDClawObjectEnv(BaseDClawEnv, metaclass=abc.ABCMeta):
                 'dclaw': RobotState(qpos=claw_pos, qvel=claw_vel),
                 'object': RobotState(qpos=object_pos, qvel=object_vel),
             })
+
+
