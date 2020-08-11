@@ -43,7 +43,7 @@ MOTION_VELOCITY_LIMIT = np.pi / 6  # 30deg/s
 # The error margin to the desired positions to consider as successful.
 SUCCESS_THRESHOLD = 10 * np.pi / 180
 
-DCLAW3_ASSET_PATH = 'robel-scenes/dclaw/dclaw3xh.xml'
+DCLAW3_ASSET_PATH = 'robel-scenes/dhand/dhand.xml'
 
 
 class BaseDHandPose(BaseDHandEnv, metaclass=abc.ABCMeta):
@@ -68,26 +68,36 @@ class BaseDHandPose(BaseDHandEnv, metaclass=abc.ABCMeta):
             frame_skip=frame_skip,
             **kwargs)
 
-        self._initial_pos = np.zeros(9)
-        self._desired_pos = np.zeros(9)
+        self._initial_pos = np.zeros(23)
+        self._desired_pos = np.zeros(23)
 
     def _configure_robot(self, builder: RobotComponentBuilder):
         super()._configure_robot(builder)
         # Add an overlay group to show desired joint positions.
         builder.add_group(
-            'overlay', actuator_indices=[], qpos_indices=range(9, 18))
+            'overlay', actuator_indices=[], qpos_indices=range(16))
 
     def _reset(self):
         """Resets the environment."""
         # Mark the target position in sim.
+        #print('reset')
+        #import pdb
+        #pdb.set_trace()
         self.robot.set_state({
-            'dhand': RobotState(qpos=self._initial_pos, qvel=np.zeros(16)),
+            'dhand': RobotState(qpos=self._initial_pos[7:], qvel=np.zeros(16)),
         })
 
     def _step(self, action: np.ndarray):
         """Applies an action to the robot."""
-        self.robot.step({'dhand': action})
-
+        #action[:7] are Pose values [px,py,pz,ox,oy,oz,ow]
+	#action[7:] are dhand actions
+        self.robot.step({'dhand': action[7:]})
+        from geometry_msgs.msg import Pose
+        pose = Pose()
+        pose.position.x, pose.position.y, pose.position.z = action[:3]
+        pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w = action[3:7]
+        self.commander.send_command(pose)
+        print(pose)
     def get_obs_dict(self) -> Dict[str, Any]:
         """Returns the current observation of the environment.
 
@@ -96,12 +106,16 @@ class BaseDHandPose(BaseDHandEnv, metaclass=abc.ABCMeta):
             dictionary if `observation_keys` isn't set.
         """
         state = self.robot.get_state('dhand')
+        sqp = self.listener.sawyer_qp
+        sqpa = self.listener.sawyer_qpa
+        sqp = sqp + sqpa
+        total_state = np.append(sqp, state.qpos, axis=0)
 
         obs_dict = collections.OrderedDict((
             ('qpos', state.qpos),
             ('qvel', state.qvel),
             ('last_action', self._get_last_action()),
-            ('qpos_error', self._desired_pos - state.qpos),
+            ('qpos_error', self._desired_pos - total_state),
         ))
         # Add hardware-specific state if present.
         if isinstance(state, DynamixelRobotState):
@@ -148,17 +162,20 @@ class BaseDHandPose(BaseDHandEnv, metaclass=abc.ABCMeta):
     def _make_random_pose(self) -> np.ndarray:
         """Returns a random pose."""
         pos_range = self.robot.get_config('dhand').qpos_range
-        random_range = pos_range.copy()
+        random_range = self.sawyer_bounds.copy()
+        random_range = np.append(random_range,pos_range.copy(), axis=0)
+
         # Clamp middle joints to at most 0 (joints always go outwards) to avoid
         # entanglement.
         #random_range[[1, 4, 7], 1] = 0
         pose = self.np_random.uniform(
             low=random_range[:, 0], high=random_range[:, 1])
+        #print(pose)
         return pose
 
     def _update_overlay(self):
         """Updates the overlay in simulation to show the desired pose."""
-        self.robot.set_state({'overlay': RobotState(qpos=self._desired_pos)})
+        self.robot.set_state({'overlay': RobotState(qpos=self._desired_pos[7:])})
 
 
 @configurable(pickleable=True)
@@ -178,6 +195,7 @@ class DHandPoseRandom(BaseDHandPose):
 
     def _reset(self):
         # Choose two poses to oscillate between.
+
         pose_a = self._make_random_pose()
         pose_b = self._make_random_pose()
         self._initial_pos = 0.5 * (pose_a + pose_b)
@@ -186,7 +204,7 @@ class DHandPoseRandom(BaseDHandPose):
         # Initialize a random oscilliation period.
         dclaw_config = self.robot.get_config('dhand')
         self._period = self.np_random.uniform(
-            low=0.5, high=2.0, size=len(dclaw_config.qpos_indices))
+            low=0.5, high=2.0, size=len(dclaw_config.qpos_indices)+7)
 
         # Clamp the movement range by the velocity limit.
         vel_limit = MOTION_VELOCITY_LIMIT / self._period

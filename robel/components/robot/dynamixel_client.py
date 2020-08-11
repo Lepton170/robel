@@ -138,6 +138,7 @@ class DynamixelClient:
         NOTE: This should be called after all DynamixelClients on the same
             process are created.
         """
+        #import pdb; pdb.set_trace()
         assert not self.is_connected, 'Client is already connected.'
 
         if self.port_handler.openPort():
@@ -193,6 +194,9 @@ class DynamixelClient:
             )
             if remaining_ids:
                 logging.error('Could not set torque %s for IDs: %s',
+                              'enabled' if enabled else 'disabled',
+                              str(remaining_ids))
+                print('Could not set torque %s for IDs: %s',
                               'enabled' if enabled else 'disabled',
                               str(remaining_ids))
             if retries == 0:

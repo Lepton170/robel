@@ -65,13 +65,45 @@ DEFAULT_DHAND_CALIBRATION_MAP = CalibrationMap({
     #60: (1, -PI),
 })
 
+class SawyerListener():
+    # Receiver node
+    def __init__(self):
+        import rospy
+        from std_msgs.msg import String
+        from geometry_msgs.msg import Pose
+
+        self.sawyer_qp = [0,0,0]
+        self.sawyer_qpa = [0,0,0,0]
+        rospy.Subscriber("get_angles", Pose, self.store_latest_qp)
+        rospy.sleep(1)
+
+    def store_latest_qp(self, pose):
+        self.sawyer_qp = [pose.position.x, pose.position.y, pose.position.z]
+        self.sawyer_qpa = [pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w]
+
+class SawyerCommander():
+    # Talking node
+    def __init__(self):
+        import rospy
+        from std_msgs.msg import String
+        from geometry_msgs.msg import Pose
+
+        rate = rospy.Rate(13) # 10hz
+        self.pub = rospy.Publisher("set_angles", Pose, queue_size=10)
+        rospy.sleep(1)
+
+    def send_command(self, comm):
+        if self.pub.get_num_connections() == 0:
+                print("No subscribers connected")
+        self.pub.publish(comm)
+
 
 class BaseDHandEnv(RobotEnv, metaclass=abc.ABCMeta):
     """Base environment for all DHand robot tasks."""
 
     def __init__(self,
                  *args,
-                 device_path: Optional[str] = None,
+                 device_path: Optional[str] = '/dev/ttyUSB0',
                  sim_observation_noise: Optional[float] = None,
                  **kwargs):
         """Initializes the environment.
@@ -90,6 +122,20 @@ class BaseDHandEnv(RobotEnv, metaclass=abc.ABCMeta):
         self._configure_robot(robot_builder)
         self.robot = self._add_component(robot_builder)
 
+	# Create communicators with Sawyer
+        import rospy
+        rospy.init_node('sawyer2')
+        self.listener = SawyerListener()
+        self.commander = SawyerCommander()
+        self.sawyer_bounds = [[0.4, 0.7],
+                       [-0.2, 0.2],
+                       [0.2, 0.5],
+                       [0,1],
+                       [0,1],
+                       [0,1],
+                       [0,1],]
+    
+    
     def get_state(self) -> Dict[str, np.ndarray]:
         """Returns the current state of the environment."""
         state = self.robot.get_state('dhand')
@@ -117,7 +163,9 @@ class BaseDHandEnv(RobotEnv, metaclass=abc.ABCMeta):
                 (-1.74, 1.66),
                 (-1.66, 1.66)
             ],
-            qvel_range=[(-2 * PI / 3, 2 * PI / 3)] * 16)
+            qvel_range=[(-2 * PI / 3, 2 * PI / 3)] * 16,
+            actuator_indices=None
+            )
         if self._sim_observation_noise is not None:
             builder.update_group(
                 'dhand', sim_observation_noise=self._sim_observation_noise)
@@ -132,7 +180,7 @@ class BaseDHandEnv(RobotEnv, metaclass=abc.ABCMeta):
     def _initialize_action_space(self) -> gym.Space:
         """Returns the observation space to use for this environment."""
         qpos_indices = self.robot.get_config('dhand').qpos_indices
-        return make_box_space(-1.0, 1.0, shape=(qpos_indices.size,))
+        return make_box_space(-1.0, 1.0, shape=(qpos_indices.size+7,))
 
     def _get_safety_scores(
             self,

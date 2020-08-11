@@ -33,3 +33,4 @@ def register(env_id: str, class_path: str, **kwargs):
         del gym_reg.registry.env_specs[env_id]
 
     gym_reg.register(env_id, entry_point=class_path, **kwargs)
+    print('registered {}'.format(env_id))

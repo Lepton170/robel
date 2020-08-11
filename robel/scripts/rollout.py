@@ -29,10 +29,11 @@ import pickle
 import time
 from typing import Callable, Optional
 
+import robel
 import gym
 import numpy as np
 
-import robel
+#import robel
 from robel.scripts.utils import EpisodeLogger, parse_env_args
 
 # The default environment to load when no environment name is given.
@@ -103,7 +104,6 @@ def do_rollouts(env,
 
         while not done:
             step_start = time.time()
-
             # Get the action for the current observation.
             action = action_fn(obs)
             action_time = time.time()
@@ -195,6 +195,8 @@ def rollout_script(arg_def_fn=None,
     if env_factory:
         env = env_factory(args)
     else:
+        #import pdb
+        #pdb.set_trace()
         env = gym.make(env_id)
 
     action_fn = None

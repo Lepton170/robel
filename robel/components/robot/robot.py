@@ -107,6 +107,7 @@ class RobotComponent(BaseComponent):
             **kwargs: Implementation-specific arguments.
         """
         group_states = []
+        
         for group_name, state in state_groups.items():
             config = self.get_config(group_name)
 

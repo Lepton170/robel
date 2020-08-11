@@ -30,8 +30,10 @@ register(
 
 register(
     env_id='DHandPoseRandom-v0',
-    class_path='robel.dhand.pose:DhandPoseRandom',
+    class_path='robel.dhand.pose:DHandPoseRandom',
     max_episode_steps=_POSE_EPISODE_LEN)
+print('DHandPoseRandom-v0 registered')
+
 """
 register(
     env_id='DClawPoseFixed-v0',

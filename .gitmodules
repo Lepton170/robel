@@ -1,3 +1,4 @@
 [submodule "robel/robel-scenes"]
 	path = robel/robel-scenes
-	url = https://github.com/google-research/robel-scenes.git
+    url = https://github.com/google-research/robel-scenes.git
+    branch = experimental-hand
