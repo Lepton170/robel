@@ -25,7 +25,7 @@ import numpy as np
 
 from robel.components.robot.dynamixel_robot import DynamixelRobotState
 from robel.components.robot import RobotComponentBuilder, RobotState
-from robel.dhand.base_env import BaseDHandEnv
+from robel.dhand.base_env import BaseDHandObjectEnv
 from robel.simulation.randomize import SimRandomizer
 from robel.utils.configurable import configurable
 from robel.utils.resources import get_asset_path
@@ -46,7 +46,7 @@ SUCCESS_THRESHOLD = 10 * np.pi / 180
 DCLAW3_ASSET_PATH = 'robel-scenes/dhand/dhand.xml'
 
 
-class BaseDHandPose(BaseDHandEnv, metaclass=abc.ABCMeta):
+class BaseDHandReach(BaseDHandObjectEnv, metaclass=abc.ABCMeta):
     """Shared logic for DClaw pose tasks."""
 
     def __init__(self,
@@ -97,6 +97,7 @@ class BaseDHandPose(BaseDHandEnv, metaclass=abc.ABCMeta):
         self.robot.step({'dhand': action[7:]})
         self.command_sawyer(RobotState(qpos=action[:7], qvel=np.zeros(7)))
         #print(action[:7])
+
     def get_obs_dict(self) -> Dict[str, Any]:
         """Returns the current observation of the environment.
 
@@ -105,17 +106,19 @@ class BaseDHandPose(BaseDHandEnv, metaclass=abc.ABCMeta):
             dictionary if `observation_keys` isn't set.
         """
         state = self.robot.get_state('dhand')
+        obj_qpos = self.listener.obj_qp
+        print(obj_qpos)
         sqp = self.listener.sawyer_qp
         sqpa = self.listener.sawyer_qpa
         sqp = sqp + sqpa
-        self.robot.set_state({'sawyer': RobotState(qpos=state.qpos[:7], qvel=state.qvel[:7])})
+        self.robot.set_state({'sawyer': RobotState(qpos=sqp, qvel=np.zeros(7))})
         total_state = np.append(sqp, state.qpos, axis=0)
 
         obs_dict = collections.OrderedDict((
             ('qpos', state.qpos),
             ('qvel', state.qvel),
             ('last_action', self._get_last_action()),
-            ('qpos_error', self._desired_pos - total_state),
+            ('qpos_error', [abs(sqp[i] - obj_qpos[i]) for i in range(3)]),
         ))
         # Add hardware-specific state if present.
         if isinstance(state, DynamixelRobotState):
@@ -159,6 +162,10 @@ class BaseDHandPose(BaseDHandEnv, metaclass=abc.ABCMeta):
             ))
         return score_dict
 
+    def _update_overlay(self):
+        """Updates the overlay in simulation to show the desired pose."""
+        self.robot.set_state({'overlay': RobotState(qpos=self._desired_pos[7:])})
+
     def _make_random_pose(self) -> np.ndarray:
         """Returns a random pose."""
         pos_range = self.robot.get_config('dhand').qpos_range
@@ -173,13 +180,9 @@ class BaseDHandPose(BaseDHandEnv, metaclass=abc.ABCMeta):
         #print(pose)
         return pose
 
-    def _update_overlay(self):
-        """Updates the overlay in simulation to show the desired pose."""
-        self.robot.set_state({'overlay': RobotState(qpos=self._desired_pos[7:])})
-
 
 @configurable(pickleable=True)
-class DHandPoseFixed(BaseDHandPose):
+class DHandReachFixed(BaseDHandReach):
     """Track a fixed random initial and final pose."""
 
     def _reset(self):
@@ -189,69 +192,4 @@ class DHandPoseFixed(BaseDHandPose):
         super()._reset()
 
 
-@configurable(pickleable=True)
-class DHandPoseRandom(BaseDHandPose):
-    """Track a random moving pose."""
 
-    def _reset(self):
-        # Choose two poses to oscillate between.
-
-        pose_a = self._make_random_pose()
-        pose_b = self._make_random_pose()
-        self._initial_pos = 0.5 * (pose_a + pose_b)
-        self._dynamic_range = 0.5 * np.abs(pose_b - pose_a)
-
-        # Initialize a random oscilliation period.
-        dclaw_config = self.robot.get_config('dhand')
-        self._period = self.np_random.uniform(
-            low=0.5, high=2.0, size=len(dclaw_config.qpos_indices)+7)
-
-        # Clamp the movement range by the velocity limit.
-        vel_limit = MOTION_VELOCITY_LIMIT / self._period
-        self._dynamic_range = np.minimum(self._dynamic_range, vel_limit)
-
-        self._update_desired_pose()
-        super()._reset()
-
-    def _update_desired_pose(self):
-        self._desired_pos = (
-            self._initial_pos +
-            (self._dynamic_range * np.sin(self._period * self.robot.time)))
-        self._update_overlay()
-
-    def _step(self, action: np.ndarray):
-        """Applies an action to the robot."""
-        result = super()._step(action)
-        self._update_desired_pose()
-        return result
-
-
-@configurable(pickleable=True)
-class DHandPoseRandomDynamics(DHandPoseRandom):
-    """Track a random moving pose.
-
-    The dynamics of the simulation are randomized each episode.
-    """
-
-    def __init__(self,
-                 *args,
-                 sim_observation_noise: Optional[float] = 0.05,
-                 **kwargs):
-        super().__init__(
-            *args, sim_observation_noise=sim_observation_noise, **kwargs)
-        self._randomizer = SimRandomizer(self)
-        self._dof_indices = (
-            self.robot.get_config('dhand').qvel_indices.tolist())
-
-    def _reset(self):
-        # Randomize joint dynamics.
-        self._randomizer.randomize_dofs(
-            self._dof_indices,
-            damping_range=(0.005, 0.1),
-            friction_loss_range=(0.001, 0.005),
-        )
-        self._randomizer.randomize_actuators(
-            all_same=True,
-            kp_range=(1, 3),
-        )
-        super()._reset()

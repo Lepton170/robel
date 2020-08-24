@@ -24,6 +24,11 @@ from robel.utils.registration import register
 _POSE_EPISODE_LEN = 80  # 80*20*2.5ms = 4s
 
 register(
+    env_id='DHandReachFixed-v0',
+    class_path='robel.dhand.reach:DHandReachFixed',
+    max_episode_steps=100)
+
+register(
     env_id='DHandPoseFixed-v0',
     class_path='robel.dhand.pose:DHandPoseFixed',
     max_episode_steps=_POSE_EPISODE_LEN)
@@ -32,7 +37,6 @@ register(
     env_id='DHandPoseRandom-v0',
     class_path='robel.dhand.pose:DHandPoseRandom',
     max_episode_steps=_POSE_EPISODE_LEN)
-print('DHandPoseRandom-v0 registered')
 
 """
 register(
