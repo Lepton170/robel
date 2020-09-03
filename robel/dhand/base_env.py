@@ -88,9 +88,9 @@ class SawyerListener():
         self.sawyer_qpa = [pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w]
         self.update_dat('sawyer')
 
-    def store_latest_obj(self, obj_qp):
-        #print(obj_qp)
-        self.obj_qp = obj_qp.data[-3:]
+    def store_latest_obj(self, obj_info):
+        temp = obj_info.data[2:5]
+        self.obj_qp[0], self.obj_qp[2], self.obj_qp[1] = temp
         self.update_dat('obj')
 
     def update_dat(self, which):
@@ -105,16 +105,18 @@ class SawyerCommander():
     # Talking node
     def __init__(self):
         import rospy
-        from std_msgs.msg import String
+        from std_msgs.msg import Bool
         from geometry_msgs.msg import Pose
 
         rate = rospy.Rate(13) # 10hz
         self.pub = rospy.Publisher("set_angles", Pose, queue_size=10)
+        self.pub_type = rospy.Publisher("command_type", Bool, queue_size=10)
         rospy.sleep(1)
 
-    def send_command(self, comm):
+    def send_command(self, comm, comm_type=False):
         if self.pub.get_num_connections() == 0:
                 print("No subscribers connected")
+        self.pub_type.publish(comm_type)
         self.pub.publish(comm)
 
 
@@ -125,7 +127,6 @@ class BaseDHandEnv(RobotEnv, metaclass=abc.ABCMeta):
                  *args,
                  device_path: Optional[str] = '/dev/ttyUSB0',
                  sim_observation_noise: Optional[float] = None,
-                 frame_skip = 125,
                  **kwargs):
         """Initializes the environment.
 
@@ -150,7 +151,7 @@ class BaseDHandEnv(RobotEnv, metaclass=abc.ABCMeta):
         self.commander = SawyerCommander()
         self.sawyer_bounds = [[0.4, 0.7],
                        [-0.2, 0.2],
-                       [0.2, 0.5],
+                       [0.25, 0.5],
                        [0,1],
                        [0,1],
                        [0,1],
@@ -171,17 +172,19 @@ class BaseDHandEnv(RobotEnv, metaclass=abc.ABCMeta):
         self.robot.set_state(
             {'dhand': RobotState(qpos=state['qpos'][7:], qvel=state['qvel'][7:])})
     
-    def command_sawyer(self, state: Dict[str, np.ndarray]):
+    def command_sawyer(self, state: Dict[str, np.ndarray], angles = False):
         action = state.qpos
-        action_range = 2 # -1 to 1
-        qp_range = self.robot.get_config('sawyer').qpos_range
-        print("ACTION 0: {}".format(action[:3]))
-        action = [((action[i] + 1)/action_range*(qp_range[i,1]-qp_range[i,0]))+qp_range[i,0] for i in range(action.size)]
+        if not angles:
+            qp_range = self.robot.get_config('sawyer').qpos_range
+            mid_sawyer = np.mean(qp_range, axis=1)
+            rng_sawyer = 0.5*(qp_range[:, 1] - qp_range[:, 0])
+            action = mid_sawyer + action*rng_sawyer
         pose = Pose()
         pose.position.x, pose.position.y, pose.position.z = action[:3]
+        # TODO: change this action to use euler angle and convert, then pass into send_command
         pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w = action[3:]
-        print(pose)
-        self.commander.send_command(pose)
+        #print(pose, angles)
+        self.commander.send_command(pose, angles)
 
     def _configure_robot(self, builder: RobotComponentBuilder):
         """Configures the robot component."""
@@ -202,10 +205,10 @@ class BaseDHandEnv(RobotEnv, metaclass=abc.ABCMeta):
             'sawyer',
             qpos_indices=range(7),
             qpos_range=[
-                (0.4,0.5),
-                (-0.16,0.05),
-                (0.3,0.6)]+
-                [(0,1)]*4
+                (0.59,0.72), # X
+                (-0.26,0.18),  # Y
+                (0.25,0.56)]+  # Z
+                [(0,1)]*4 # Quat limits
             ,
             qvel_range=None,
             actuator_indices=None
@@ -287,7 +290,6 @@ class BaseDHandObjectEnv(BaseDHandEnv, metaclass=abc.ABCMeta):
         self.robot.set_state({
             'object': RobotState(qpos=self.listener.obj_qp, qvel=np.zeros(3)),
             'sawyer': RobotState(qpos=self.listener.dat[:7], qvel=np.zeros(7))})
-        print(self.listener.obj_qp)        
         dhand_state, object_state, sawyer_state = self.robot.get_state(['dhand', 'object', 'sawyer'])
         return {
             'dhand_qpos': dhand_state.qpos,
