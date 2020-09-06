@@ -156,6 +156,7 @@ class DynamixelClient:
                  'configured for this baudrate).').format(self.baudrate))
 
         # Start with all motors enabled.
+        #import pdb; pdb.set_trace()
         self.set_torque_enabled(self.motor_ids, True)
 
     def disconnect(self):

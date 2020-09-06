@@ -87,7 +87,6 @@ class RobotComponent(BaseComponent):
                 control_values = self._denormalize_action(
                     control_values, config)
             control_values = self._apply_action_bounds(control_values, config)
-
             group_controls.append((config, control_values))
 
         # Perform the control for all groups simultaneously.
