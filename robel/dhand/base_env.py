@@ -91,6 +91,7 @@ class SawyerListener():
     def store_latest_obj(self, obj_info):
         temp = obj_info.data[2:5]
         self.obj_qp[0], self.obj_qp[2], self.obj_qp[1] = temp
+        self.obj_qp[2] = -1*self.obj_qp[2]
         self.update_dat('obj')
 
     def update_dat(self, which):
@@ -205,10 +206,12 @@ class BaseDHandEnv(RobotEnv, metaclass=abc.ABCMeta):
             'sawyer',
             qpos_indices=range(7),
             qpos_range=[
-                (0.59,0.72), # X
-                (-0.26,0.18),  # Y
-                (0.25,0.56)]+  # Z
-                [(0,1)]*4 # Quat limits
+                (0.46,0.54),(-0.105,0.05),(0.18,0.19),
+                (0.495,0.505),(0.495,0.505),(0.46,0.47),(0.515,0.525)]  #CHANGE FOR WHEN NOT DOING FIXED OBJ
+                #(0.59,0.72), # X
+                #(-0.26,0.18),  # Y             #FIXED OBJ LIMITS
+                #(0.25,0.56)]+  # Z
+                #[(0,1)]*4 # Quat limits
             ,
             qvel_range=None,
             actuator_indices=None
@@ -284,6 +287,10 @@ class BaseDHandObjectEnv(BaseDHandEnv, metaclass=abc.ABCMeta):
         """
         self._use_guide = use_guide
         super().__init__(*args, **kwargs)
+        if hasattr(self, '_configure_object'):
+            robot_builder = RobotComponentBuilder()
+            self._configure_object(robot_builder)
+            self.object = self._add_component(robot_builder)
 
     def get_state(self) -> Dict[str, np.ndarray]:
         """Returns the current state of the environment."""

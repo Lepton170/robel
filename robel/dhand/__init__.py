@@ -24,6 +24,17 @@ from robel.utils.registration import register
 _POSE_EPISODE_LEN = 80  # 80*20*2.5ms = 4s
 
 register(
+    env_id='DHandRepositionFixed-v0',
+    class_path='robel.dhand.reposition:DHandRepositionFixed',
+    max_episode_steps=80
+)
+
+register(
+    env_id='DHandRotateFixed-v0',
+    class_path='robel.dhand.rotate:DHandRotateFixed',
+    max_episode_steps=80)
+
+register(
     env_id='DHandReachFixed-v0',
     class_path='robel.dhand.reach:DHandReachFixed',
     max_episode_steps=100)
